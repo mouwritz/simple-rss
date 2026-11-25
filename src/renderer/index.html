@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src https: http: data:; connect-src 'none'; font-src 'self'; base-uri 'none'; form-action 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Simple RSS</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Simple RSS</div>
+    <nav class="tabs" role="tablist">
+      <span class="tab-indicator" aria-hidden="true"></span>
+      <button class="tab" role="tab" data-view="feed" aria-selected="true">Feed</button>
+      <button class="tab" role="tab" data-view="channels" aria-selected="false">Channels <span id="channel-count" class="count"></span></button>
+    </nav>
+    <div class="spacer"></div>
+    <span id="status" class="status" aria-live="polite"></span>
+    <button id="refresh" class="btn" title="Refresh all channels (Ctrl/⌘+R)"><span class="refresh-icon" aria-hidden="true">↻</span> Refresh</button>
+  </header>
+
+  <!-- Feed view: list of posts + reader -->
+  <main id="feed-view" class="split">
+    <section class="list-pane" aria-label="Posts">
+      <div class="list-toolbar">
+        <select id="filter" aria-label="Show posts from"></select>
+        <button id="mark-all-read" class="btn btn-quiet" title="Mark all shown posts as read">Mark all read</button>
+      </div>
+      <ul id="item-list" class="item-list" tabindex="0"></ul>
+    </section>
+    <article id="reader" class="reader" aria-live="polite"></article>
+  </main>
+
+  <!-- Channels sub menu -->
+  <main id="channels-view" class="channels-view" hidden>
+    <div class="channels-inner">
+      <section class="card">
+        <h2>Add channel</h2>
+        <form id="add-form" class="add-form" autocomplete="off">
+          <input id="add-url" type="text" inputmode="url" spellcheck="false" required placeholder="https://example.com/feed.xml or a website address" aria-label="Feed or website URL">
+          <button class="btn btn-primary" type="submit">Add</button>
+        </form>
+        <div class="add-options">
+          <div class="swatches" id="add-swatches" role="radiogroup" aria-label="Channel color"></div>
+          <label class="check"><input type="checkbox" id="add-favorite"> <span class="star">★</span> Favorite — send desktop notifications</label>
+        </div>
+        <p id="add-message" class="message" role="status"></p>
+      </section>
+
+      <section class="card">
+        <h2>Channels</h2>
+        <ul id="channel-list" class="channel-list"></ul>
+      </section>
+
+      <section class="card">
+        <h2>Settings</h2>
+        <label class="setting">Auto refresh
+          <select id="refresh-interval">
+            <option value="1">Every minute</option>
+            <option value="5">Every 5 minutes</option>
+            <option value="15">Every 15 minutes</option>
+            <option value="30">Every 30 minutes</option>
+            <option value="60">Every hour</option>
+            <option value="0">Off</option>
+          </select>
+        </label>
+        <button id="test-notification" class="btn btn-quiet" type="button">Send a test notification</button>
+      </section>
+    </div>
+  </main>
+
+  <script src="feed.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
