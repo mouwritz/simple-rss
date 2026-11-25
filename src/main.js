@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, Notification, shell, net } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, shell, net, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
 
@@ -146,6 +146,10 @@ ipcMain.handle('notify', (_e, { title, body, channelId, itemId }) => {
   n.on('close', () => liveNotifications.delete(n));
   n.show();
   return true;
+});
+
+ipcMain.handle('theme:set', (_e, theme) => {
+  if (['system', 'light', 'dark'].includes(theme)) nativeTheme.themeSource = theme;
 });
 
 ipcMain.handle('open-external', (_e, url) => {

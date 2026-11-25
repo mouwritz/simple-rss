@@ -11,7 +11,7 @@ const FETCH_CONCURRENCY = 4;
 const state = {
   channels: [],          // { id, url, title, customTitle, color, favorite, initialized, error, lastFetched }
   items: {},             // channelId -> [{ id, title, link, date, summary, content, image, read, firstSeen }]
-  settings: { refreshMinutes: 5 },
+  settings: { refreshMinutes: 5, theme: 'system', uiFont: 'system', readingFont: 'serif', fontSize: 100 },
   view: 'feed',
   filter: 'all',         // 'all' | 'favorites' | channelId
   selected: null,        // { channelId, itemId }
@@ -19,6 +19,24 @@ const state = {
   lastRefresh: null,
   newColor: '',
 };
+
+const FONTS = {
+  system: 'system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", sans-serif',
+  sans: 'Inter, "Helvetica Neue", Helvetica, Arial, sans-serif',
+  serif: 'Charter, "Iowan Old Style", Georgia, Cambria, "Times New Roman", serif',
+  mono: 'ui-monospace, "Cascadia Code", Consolas, Menlo, monospace',
+};
+
+function applyAppearance() {
+  const s = state.settings;
+  const root = document.documentElement;
+  if (s.theme === 'light' || s.theme === 'dark') root.dataset.theme = s.theme;
+  else delete root.dataset.theme;
+  root.style.setProperty('--font', FONTS[s.uiFont] || FONTS.system);
+  root.style.setProperty('--reading', FONTS[s.readingFont] || FONTS.serif);
+  root.style.setProperty('--scale', String((Number(s.fontSize) || 100) / 100));
+  window.api.setTheme(s.theme);
+}
 
 const $ = (sel) => document.querySelector(sel);
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -157,13 +175,27 @@ async function refreshAll() {
   document.body.classList.add('is-refreshing');
   setStatus('Refreshing…');
   const queue = [...state.channels];
-  const worker = async () => { while (queue.length) await refreshChannel(queue.shift()); };
+  const total = queue.length;
+  let done = 0;
+  const worker = async () => {
+    while (queue.length) {
+      await refreshChannel(queue.shift());
+      done++;
+      setStatus(`Refreshing ${done}/${total}…`);
+      updateList(); // results stream in; no full rebuild
+    }
+  };
   await Promise.all(Array.from({ length: FETCH_CONCURRENCY }, worker));
   state.refreshing = false;
   state.lastRefresh = Date.now();
   document.body.classList.remove('is-refreshing');
   save();
-  render({ animateList: true });
+  renderFilter();
+  updateList();
+  renderChannels();
+  const sel = state.selected;
+  if (sel && !findItem(sel.channelId, sel.itemId)) closeReader();
+  updateStatus();
   scheduleRefresh();
 }
 
@@ -223,25 +255,58 @@ function renderList({ animate = false } = {}) {
     return;
   }
   list.replaceChildren(...rows.map(({ ch, it }, i) => {
-    const selected = state.selected && state.selected.channelId === ch.id && state.selected.itemId === it.id;
-    const li = h('li', {
-      class: ['row', ch.color && 'has-color', it.read && 'is-read', selected && 'is-selected'].filter(Boolean).join(' '),
-      color: ch.color || null,
-      'data-channel': ch.id,
-      'data-item': it.id,
-      'aria-selected': selected ? 'true' : 'false',
-      onclick: () => select(ch.id, it.id),
-    },
-    h('div', { class: 'row-title', text: it.title }),
-    it.summary ? h('div', { class: 'row-summary', text: it.summary }) : null,
-    h('div', { class: 'row-meta' },
-      ch.favorite ? h('span', { class: 'star', text: '★' }) : null,
-      h('span', { text: channelName(ch) }),
-      h('span', { class: 'dot', text: '·' }),
-      h('time', { text: relativeTime(it.date || it.firstSeen), title: fullDate(it.date || it.firstSeen) })));
+    const li = buildRow(ch, it);
     li.style.setProperty('--i', String(Math.min(i, STAGGER_ROWS)));
     return li;
   }));
+}
+
+function buildRow(ch, it) {
+  const selected = state.selected && state.selected.channelId === ch.id && state.selected.itemId === it.id;
+  return h('li', {
+    class: ['row', ch.color && 'has-color', it.read && 'is-read', selected && 'is-selected'].filter(Boolean).join(' '),
+    color: ch.color || null,
+    'data-channel': ch.id,
+    'data-item': it.id,
+    'aria-selected': selected ? 'true' : 'false',
+    onclick: () => select(ch.id, it.id),
+  },
+  h('div', { class: 'row-title', text: it.title }),
+  it.summary ? h('div', { class: 'row-summary', text: it.summary }) : null,
+  h('div', { class: 'row-meta' },
+    ch.favorite ? h('span', { class: 'star', text: '★' }) : null,
+    h('span', { text: channelName(ch) }),
+    h('span', { class: 'dot', text: '·' }),
+    h('time', { text: relativeTime(it.date || it.firstSeen), title: fullDate(it.date || it.firstSeen) })));
+}
+
+// Reconcile the list in place: keeps existing rows, scroll position and selection; only new rows animate.
+function updateList() {
+  const list = $('#item-list');
+  const rows = visibleItems();
+  if (!state.channels.length || !rows.length) { renderList(); return; }
+  const existing = new Map();
+  list.querySelectorAll('.row').forEach((li) => existing.set(li.dataset.channel + '|' + li.dataset.item, li));
+  list.querySelectorAll('.empty').forEach((li) => li.remove());
+  const animateNew = existing.size > 0;
+  let prev = null;
+  for (const { ch, it } of rows) {
+    const key = ch.id + '|' + it.id;
+    let li = existing.get(key);
+    if (li) {
+      existing.delete(key);
+      const fresh = buildRow(ch, it);
+      if (li.innerHTML !== fresh.innerHTML) li.innerHTML = fresh.innerHTML;
+      li.classList.toggle('is-read', !!it.read);
+    } else {
+      li = buildRow(ch, it);
+      if (animateNew) li.classList.add('is-new');
+    }
+    const expected = prev ? prev.nextElementSibling : list.firstElementChild;
+    if (expected !== li) list.insertBefore(li, expected);
+    prev = li;
+  }
+  for (const li of existing.values()) li.remove();
 }
 
 function rowEl(channelId, itemId) {
@@ -280,6 +345,7 @@ function renderReader() {
 
   reader.replaceChildren(
     h('div', { class: 'reader-inner' },
+      h('button', { type: 'button', class: 'reader-close', title: 'Close (Esc)', 'aria-label': 'Close reader', onclick: closeReader, text: '×' }),
       hero,
       h('div', { class: 'reader-head' },
         h('div', { class: 'reader-channel' }, ch.favorite ? h('span', { class: 'star', text: '★ ' }) : null, channelName(ch)),
@@ -292,8 +358,19 @@ function renderReader() {
   reader.scrollTop = 0;
 }
 
+function closeReader() {
+  state.selected = null;
+  document.querySelectorAll('#item-list .row.is-selected').forEach((r) => {
+    r.classList.remove('is-selected');
+    r.setAttribute('aria-selected', 'false');
+  });
+  $('#feed-view').classList.add('reader-closed');
+  renderReader();
+}
+
 function select(channelId, itemId) {
   state.selected = { channelId, itemId };
+  $('#feed-view').classList.remove('reader-closed');
   const it = findItem(channelId, itemId);
   if (it && !it.read) { it.read = true; save(); }
   // Update rows in place so CSS transitions (selection, unread dot) can play.
@@ -441,6 +518,7 @@ function render({ animateList = false } = {}) {
   renderFilter();
   renderList({ animate: animateList });
   renderReader();
+  $('#feed-view').classList.toggle('reader-closed', !state.selected);
   renderChannels();
   updateStatus();
 }
@@ -471,6 +549,17 @@ function wire() {
   interval.value = String(state.settings.refreshMinutes);
   interval.addEventListener('change', () => { state.settings.refreshMinutes = Number(interval.value); save(); scheduleRefresh(); });
 
+  for (const [id, key, num] of [['#theme', 'theme'], ['#ui-font', 'uiFont'], ['#reading-font', 'readingFont'], ['#font-size', 'fontSize', true]]) {
+    const el = $(id);
+    el.value = String(state.settings[key]);
+    el.addEventListener('change', () => {
+      state.settings[key] = num ? Number(el.value) : el.value;
+      applyAppearance();
+      save();
+      positionTabIndicator(true);
+    });
+  }
+
   $('#test-notification').addEventListener('click', () => {
     window.api.notify({ title: 'Simple RSS', body: 'Notifications are working. Favorite channels will notify you like this.' });
   });
@@ -485,6 +574,7 @@ function wire() {
 
   document.addEventListener('keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r') { e.preventDefault(); refreshAll(); return; }
+    if (e.key === 'Escape' && state.view === 'feed' && state.selected) { closeReader(); return; }
     if (state.view !== 'feed' || /input|select|textarea/i.test(document.activeElement.tagName)) return;
     if (e.key === 'ArrowDown' || e.key === 'j') { e.preventDefault(); moveSelection(1); }
     if (e.key === 'ArrowUp' || e.key === 'k') { e.preventDefault(); moveSelection(-1); }
@@ -497,11 +587,12 @@ function wire() {
     select(channelId, itemId);
   });
 
-  setInterval(() => { if (state.view === 'feed') renderList(); updateStatus(); }, 60 * 1000); // keep "x min ago" fresh
+  setInterval(() => { if (state.view === 'feed') updateList(); updateStatus(); }, 60 * 1000); // keep "x min ago" fresh
 }
 
 (async function start() {
   await load();
+  applyAppearance();
   wire();
   render({ animateList: true });
   positionTabIndicator(true);

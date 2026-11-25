@@ -4,6 +4,12 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: false
+        default: ""
 
 jobs:
   build:
@@ -18,6 +24,8 @@ jobs:
           - os: ubuntu-latest
             target: --linux
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,3 +46,11 @@ jobs:
             dist/*.AppImage
             dist/*.deb
           if-no-files-found: error
+      - name: Attach installers to GitHub release
+        if: ${{ inputs.tag != '' }}
+        shell: bash
+        run: |
+          shopt -s nullglob
+          gh release upload "${{ inputs.tag }}" dist/*.exe dist/*.dmg dist/*.zip dist/*.AppImage dist/*.deb --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
