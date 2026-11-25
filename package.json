@@ -1,7 +1,7 @@
 {
   "name": "simple-rss",
   "productName": "Simple RSS",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A simple desktop RSS reader with auto refresh, colored channels and notifications for favorites.",
   "main": "src/main.js",
   "author": {
@@ -36,8 +36,19 @@
     },
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64", "arm64"] },
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "nsis": {
@@ -47,16 +58,38 @@
     "mac": {
       "category": "public.app-category.news",
       "target": [
-        { "target": "dmg", "arch": ["universal"] },
-        { "target": "zip", "arch": ["universal"] }
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
       ]
     },
     "linux": {
       "category": "Network;News",
       "maintainer": "Simple RSS <simple-rss@example.com>",
       "target": [
-        { "target": "AppImage", "arch": ["x64", "arm64"] },
-        { "target": "deb", "arch": ["x64", "arm64"] }
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ]
     }
   }
